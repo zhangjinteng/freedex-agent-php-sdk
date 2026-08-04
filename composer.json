@@ -1,0 +1,19 @@
+{
+  "name": "freedex/agent-sdk",
+  "description": "PHP SDK for Freedex Agent REST API",
+  "type": "library",
+  "license": "proprietary",
+  "require": {
+    "php": ">=7.4",
+    "ext-json": "*",
+    "ext-curl": "*"
+  },
+  "autoload": {
+    "psr-4": {
+      "Freedex\\Agent\\": "src/"
+    }
+  },
+  "scripts": {
+    "test": "php tests/run.php"
+  }
+}
