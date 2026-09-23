@@ -30,12 +30,12 @@ Funding ↔ Contract 只移动该用户的两个平台账户余额，不应扣�
     {"type": "vcs", "url": "https://github.com/zhangjinteng/freedex-agent-php-sdk.git"}
   ],
   "require": {
-    "freedex/agent-sdk": "dev-main"
+    "freedex/agent-sdk": "^0.2.0"
   }
 }
 ```
 
-运行 `composer update freedex/agent-sdk` 安装或更新，提交业务项目 `composer.lock`。后续部署执行 `composer install`，不要在每次部署时自动追最新分支。新增钱包能力尚未创建对应版本 tag；现有 `v0.1.0` 不包含这些能力，因此安装约束使用 `dev-main`。私有仓库凭据通过构建环境配置，不放入上述 JSON。
+运行 `composer update freedex/agent-sdk` 安装或更新，提交业务项目 `composer.lock`。后续部署执行 `composer install`，不要在每次部署时自动追最新分支。Funding 钱包能力从 `v0.2.0` 起提供；`v0.1.0` 不包含这些能力。私有仓库凭据通过构建环境配置，不放入上述 JSON。
 
 通过密钥管理或环境变量配置：
 

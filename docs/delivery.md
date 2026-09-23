@@ -9,7 +9,7 @@
 - 源 SDK 最近变更：`5c84c55e4`，保留钱包接口并撤回合约查询扩展。
 - 目标仓库：[6MM/agent-php-sdk](https://igitea.com/6MM/agent-php-sdk)。目标初始为空，交付至 `main` 分支，不创建版本 tag。
 
-上述记录描述最初的 Gitea 交付。随后将 SDK 源码及文档同步至 [GitHub 仓库](https://github.com/zhangjinteng/freedex-agent-php-sdk) 的 `main` 分支，并保留 GitHub 旧版 `AgentClient` 的调试信息访问方法，以兼容现有合作商后台。GitHub 原有的 `v0.1.0` tag 仍指向旧版，不包含 Funding 钱包能力。
+上述记录描述最初的 Gitea 交付。随后将 SDK 源码及文档同步至 [GitHub 仓库](https://github.com/zhangjinteng/freedex-agent-php-sdk) 的 `main` 分支，并保留 GitHub 旧版 `AgentClient` 的调试信息访问方法，以兼容现有合作商后台。GitHub 原有的 `v0.1.0` tag 仍指向旧版，不包含 Funding 钱包能力；Funding 钱包能力从 `v0.2.0` 起提供。
 
 本次原样同步 SDK 的 `src/`、`tests/`、`examples/` 和 `composer.json`。只重写独立仓库 README、增加中文后台对接文档及 Git 忽略规则。没有修改 Exchange 服务端、合并生产主线或执行部署。
 

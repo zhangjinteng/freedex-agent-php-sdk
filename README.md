@@ -16,12 +16,12 @@
     {"type": "vcs", "url": "https://github.com/zhangjinteng/freedex-agent-php-sdk.git"}
   ],
   "require": {
-    "freedex/agent-sdk": "dev-main"
+    "freedex/agent-sdk": "^0.2.0"
   }
 }
 ```
 
-在业务项目运行 `composer update freedex/agent-sdk`，提交业务项目的 `composer.lock`；部署使用 `composer install` 复用锁定提交。需要仓库权限时，通过构建环境的 Git 凭据配置访问，不把凭据写入 URL 或提交到代码库。新增钱包能力发布在 `main` 分支，尚未创建对应版本 tag。
+在业务项目运行 `composer update freedex/agent-sdk`，提交业务项目的 `composer.lock`；部署使用 `composer install` 复用锁定提交。需要仓库权限时，通过构建环境的 Git 凭据配置访问，不把凭据写入 URL 或提交到代码库。Funding 钱包能力从 `v0.2.0` 起提供。
 
 ## 初始化与余额查询
 
