@@ -9,6 +9,8 @@ class CreateEntryUrlRequest extends ArraySerializable
     public $agentUserId;
     /** @var string|null */
     public $redirectPath;
+    /** @var string|null */
+    public $returnUrl;
 
     public static function of(string $agentUserId): self
     {
@@ -20,6 +22,12 @@ class CreateEntryUrlRequest extends ArraySerializable
     public function withRedirectPath(string $redirectPath): self
     {
         $this->redirectPath = $redirectPath;
+        return $this;
+    }
+
+    public function withReturnUrl(string $returnUrl): self
+    {
+        $this->returnUrl = $returnUrl;
         return $this;
     }
 }

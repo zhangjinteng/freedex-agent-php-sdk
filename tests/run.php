@@ -20,8 +20,12 @@ use Freedex\Agent\Exception\AgentApiException;
 use Freedex\Agent\Exception\AgentSdkException;
 use Freedex\Agent\Http\HttpResponse;
 use Freedex\Agent\Http\HttpTransportInterface;
+use Freedex\Agent\Model\BindRequest;
+use Freedex\Agent\Model\CreateEntryUrlRequest;
 use Freedex\Agent\Model\Direction;
 use Freedex\Agent\Model\QueryOrderRequest;
+use Freedex\Agent\Model\QueryUserAssetsRequest;
+use Freedex\Agent\Model\TransferAllOutRequest;
 use Freedex\Agent\Model\TransferRequest;
 use Freedex\Agent\WebhookVerifier;
 
@@ -61,6 +65,7 @@ function assertThrows(callable $fn, string $class): Throwable
 
 final class CapturingTransport implements HttpTransportInterface
 {
+    public $calls = 0;
     /** @var int */
     private $status;
     /** @var string */
@@ -82,6 +87,7 @@ final class CapturingTransport implements HttpTransportInterface
 
     public function send(string $method, string $url, array $headers, ?string $body, float $timeoutSeconds): HttpResponse
     {
+        ++$this->calls;
         $this->lastMethod = $method;
         $this->lastUrl = $url;
         $this->lastHeaders = $headers;
@@ -154,27 +160,157 @@ $tests['client injects sign fields and sends transfer'] = function (): void {
     assertStringContainsValue('"timestamp":1713024000', $transport->lastBody);
     assertStringContainsValue('"nonce":"nonce-1"', $transport->lastBody);
     assertStringContainsValue('"sign":"', $transport->lastBody);
+    assertSameValue($transport->lastUrl, $client->getLastRequestUrl());
+    assertSameValue($transport->lastBody, $client->getLastRequestBody());
+    assertSameValue(200, $client->getLastHttpStatus());
+    assertStringContainsValue('agentCode=AGENT001', $client->getLastSignPayload());
 };
 
-// 测试：当接口返回非 0 业务错误码时，客户端应正确抛出业务异常 (AgentApiException)
-// 1. 将该测试函数注册到 $tests 数组中，键名为描述性的测试名称，返回类型为 void
-$tests['client throws business exception for non-zero code'] = function (): void {
-    // 2. 实例化模拟网络传输类 CapturingTransport，模拟 HTTP 状态码为 200 OK 且返回 code 为 6101 (订单未找到) 的 JSON 字符串
-    $transport = new CapturingTransport(200, '{"code":6101,"message":"order not found"}');
-    // 3. 实例化 AgentConfig 配置类，传入代理商基础 URL、代码、秘钥、默认币种、超时时间 (10秒) 和模拟网络传输对象
-    $config = new AgentConfig('http://agent.test', 'AGENT001', 'secret', 'USDT', 10.0, $transport);
-    // 4. 使用上述配置类实例化 Agent 客户端核心操作对象 AgentClient
+$tests['client hydrates simulated user flag from bind response'] = function (): void {
+    $transport = new CapturingTransport(200, '{"code":0,"message":"success","platformUserId":"1188041528","bindStatus":"BOUND","isSimulatedUser":true}');
+    $config = new AgentConfig(
+        'http://agent.test',
+        'AGENT001',
+        'secret',
+        'USDT',
+        10.0,
+        $transport,
+        function (): string {
+            return 'nonce-1';
+        },
+        function (): int {
+            return 1713024000;
+        }
+    );
     $client = new AgentClient($config);
 
-    // 5. 调用 assertThrows 辅助测试函数，验证内部闭包执行时是否抛出了预期的 AgentApiException 业务异常类
+    $resp = $client->bind(BindRequest::of('u-1')->withUsername('Alice'));
+
+    assertTrueValue($resp->isSimulatedUser);
+    assertStringContainsValue('"username":"Alice"', $transport->lastBody);
+};
+
+$tests['client hydrates simulated user flag from query user assets response'] = function (): void {
+    $transport = new CapturingTransport(200, '{"code":0,"message":"success","platformUserId":"1188041528","walletBalance":"10","availableBalance":"9","isSimulatedUser":true}');
+    $config = new AgentConfig(
+        'http://agent.test',
+        'AGENT001',
+        'secret',
+        'USDT',
+        10.0,
+        $transport,
+        function (): string {
+            return 'nonce-1';
+        },
+        function (): int {
+            return 1713024000;
+        }
+    );
+    $client = new AgentClient($config);
+
+    $resp = $client->queryUserAssets(QueryUserAssetsRequest::of('1188041528'));
+
+    assertTrueValue($resp->isSimulatedUser);
+};
+
+$tests['client sends transfer by platform user id and hydrates both identifiers'] = function (): void {
+    $transport = new CapturingTransport(200, '{"code":0,"message":"success","orderNo":"A-3","orderStatus":"SUCCESS","agentUserId":"u-3","platformUserId":"1188041528"}');
+    $config = new AgentConfig(
+        'http://agent.test',
+        'AGENT001',
+        'secret',
+        'USDT',
+        10.0,
+        $transport,
+        function (): string {
+            return 'nonce-1';
+        },
+        function (): int {
+            return 1713024000;
+        }
+    );
+    $client = new AgentClient($config);
+
+    $resp = $client->transfer(TransferRequest::fixedByPlatformUserId('A-3', '1188041528', Direction::OUT, 'USDT', '2.50'));
+
+    assertSameValue('u-3', $resp->agentUserId);
+    assertSameValue('1188041528', $resp->platformUserId);
+    assertStringContainsValue('"platformUserId":"1188041528"', $transport->lastBody);
+    assertTrueValue(strpos($transport->lastBody, '"agentUserId"') === false);
+};
+
+$tests['client sends entry url return url'] = function (): void {
+    $transport = new CapturingTransport(200, '{"code":0,"message":"success","webUrl":"http://app.test/agent-entry?ticket=abc","expireAt":1777000060}');
+    $config = new AgentConfig(
+        'http://agent.test',
+        'AGENT001',
+        'secret',
+        'USDT',
+        10.0,
+        $transport,
+        function (): string {
+            return 'nonce-1';
+        },
+        function (): int {
+            return 1713024000;
+        }
+    );
+    $client = new AgentClient($config);
+
+    $resp = $client->createEntryUrl(
+        CreateEntryUrlRequest::of('u-1')
+            ->withRedirectPath('/trade/BTCUSDT')
+            ->withReturnUrl('https://partner.example/return#markets')
+    );
+
+    assertSameValue('http://app.test/agent-entry?ticket=abc', $resp->webUrl);
+    assertSameValue(1777000060, $resp->expireAt);
+    assertSameValue('POST', $transport->lastMethod);
+    assertSameValue('http://agent.test/v1/agent/create-entry-url', $transport->lastUrl);
+    assertStringContainsValue('"agentUserId":"u-1"', $transport->lastBody);
+    assertStringContainsValue('"redirectPath":"/trade/BTCUSDT"', $transport->lastBody);
+    assertStringContainsValue('"returnUrl":"https://partner.example/return#markets"', $transport->lastBody);
+};
+
+$tests['client sends all-out by platform user id and hydrates both identifiers'] = function (): void {
+    $transport = new CapturingTransport(200, '{"code":0,"message":"success","orderNo":"A-4","orderStatus":"SUCCESS","amount":"8.50","agentUserId":"u-4","platformUserId":"1188041529"}');
+    $config = new AgentConfig(
+        'http://agent.test',
+        'AGENT001',
+        'secret',
+        'USDT',
+        10.0,
+        $transport,
+        function (): string {
+            return 'nonce-1';
+        },
+        function (): int {
+            return 1713024000;
+        }
+    );
+    $client = new AgentClient($config);
+
+    $resp = $client->transferAllOut(TransferAllOutRequest::byPlatformUserId('A-4', '1188041529', 'USDT'));
+
+    assertSameValue('u-4', $resp->agentUserId);
+    assertSameValue('1188041529', $resp->platformUserId);
+    assertStringContainsValue('"platformUserId":"1188041529"', $transport->lastBody);
+    assertTrueValue(strpos($transport->lastBody, '"agentUserId"') === false);
+};
+
+$tests['client throws business exception for non-zero code'] = function (): void {
+    $transport = new CapturingTransport(200, '{"code":6101,"message":"order not found"}');
+    $config = new AgentConfig('http://agent.test', 'AGENT001', 'secret', 'USDT', 10.0, $transport);
+    $client = new AgentClient($config);
+
     $e = assertThrows(function () use ($client): void {
-        // 6. 调用客户端的订单查询接口 queryOrder，传入不存在的订单号 'missing' 以及划转类型 'TRANSFER_IN'，预期此时因模拟响应报错而抛出异常
         $client->queryOrder(QueryOrderRequest::of('missing', 'TRANSFER_IN'));
     }, AgentApiException::class);
 
-    // 7. 调用 assertSameValue 断言函数，校验捕获到的业务异常对象中的错误码（CodeValue）是否为预期的 6101
     assertSameValue(6101, $e->getCodeValue());
 };
+
+require __DIR__ . '/wallet.php';
 
 $passed = 0;
 foreach ($tests as $name => $test) {

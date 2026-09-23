@@ -9,4 +9,8 @@ class TransferResponse extends AgentResponse
     public $orderNo = '';
     /** @var string */
     public $orderStatus = '';
+    /** @var string */
+    public $agentUserId = '';
+    /** @var string */
+    public $platformUserId = '';
 }

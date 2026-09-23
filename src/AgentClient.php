@@ -26,6 +26,10 @@ use Freedex\Agent\Model\TransferRequest;
 use Freedex\Agent\Model\TransferResponse;
 use Freedex\Agent\Model\VersionResponse;
 
+use Freedex\Agent\Model\WalletTransferRequest;
+use Freedex\Agent\Model\WalletTransferQueryRequest;
+use Freedex\Agent\Model\WalletTransferResponse;
+
 class AgentClient
 {
     /** @var AgentConfig */
@@ -113,6 +117,16 @@ class AgentClient
         return $this->postSigned('/v1/agent/create-entry-url', $request->toArray(), CreateEntryUrlResponse::class);
     }
 
+    public function walletTransfer(WalletTransferRequest $request): WalletTransferResponse
+    {
+        return $this->postSigned('/v1/agent/wallet-transfer', $request->toArray(), WalletTransferResponse::class);
+    }
+
+    public function queryWalletTransfer(WalletTransferQueryRequest $request): WalletTransferResponse
+    {
+        return $this->postSigned('/v1/agent/wallet-transfer-status', $request->toArray(), WalletTransferResponse::class);
+    }
+
     public function version(): VersionResponse
     {
         return $this->send('GET', '/version', [], null, VersionResponse::class);
@@ -161,30 +175,11 @@ class AgentClient
 
         $this->lastHttpStatus = $resp->getStatusCode();
 
-        // if (function_exists('dd')) {
-        //     dd([
-        //         'request_url' => $this->config->getBaseUrl() . $path,
-        //         'request_body' => json_decode($body ?? '', true) ?: $body,
-        //         'request_headers' => $headers,
-        //         'response_body' => json_decode($resp->getBody(), true) ?: $resp->getBody(),
-        //         'response_status' => $resp->getStatusCode()
-        //     ]);
-        // } else {
-        //     var_dump([
-        //         'request_url' => $this->config->getBaseUrl() . $path,
-        //         'request_body' => json_decode($body ?? '', true) ?: $body,
-        //         'request_headers' => $headers,
-        //         'response_body' => json_decode($resp->getBody(), true) ?: $resp->getBody(),
-        //         'response_status' => $resp->getStatusCode()
-        //     ]);
-        //     exit(1);
-        // }
-
         if ($resp->getStatusCode() < 200 || $resp->getStatusCode() >= 300) {
             throw new AgentApiException('agent api returned http status ' . $resp->getStatusCode(), $resp->getStatusCode(), 0, $resp->getBody());
         }
 
-        $data = json_decode($resp->getBody(), true);
+        $data = json_decode($resp->getBody(), true, 512, JSON_BIGINT_AS_STRING);
         if (!is_array($data)) {
             throw new AgentSdkException('failed to parse agent api response');
         }

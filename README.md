@@ -1,208 +1,87 @@
-# Freedex Agent PHP SDK
+# 6MM Agent PHP SDK
 
-PHP SDK for Freedex Agent REST API.
+合作商后台调用 6MM Agent REST API 的 PHP SDK，提供请求签名、用户绑定、上下分、Funding 钱包划转、余额查询、入口链接和 Webhook 验签。
 
-第一版目标是让代理商接入时不需要自己处理签名、nonce、timestamp、金额字符串和 webhook 验签。SDK 最低兼容 PHP 7.4，但 PHP 7.4 已经停止官方安全支持，生产环境建议使用 PHP 8.1+ 或当前受支持版本。
+**后台研发请先阅读 [PHP SDK 后台对接文档](docs/backend-integration.md)。** 文档包含安装、完整方法表、可复制示例、金额约束、订单幂等、异常处理与联调步骤。
 
-## 要求
+## 安装
 
-- PHP 7.4+
-- `ext-json`
-- `ext-curl`
-- Composer（用于正式项目 autoload）
+要求 PHP 7.4 或以上、`ext-json`、`ext-curl`，使用 Composer 自动加载。部署时请选择组织仍维护的 PHP 运行环境。
 
-## Composer
-
-当前仓库内版本：
-
-```json
-{
-  "require": {
-    "freedex/agent-sdk": "*"
-  }
-}
-```
-
-GitHub 私有仓库可在业务项目里使用 VCS repository：
+在业务项目的 `composer.json` 合并以下配置：
 
 ```json
 {
   "repositories": [
-    {
-      "type": "vcs",
-      "url": "https://github.com/zhangjinteng/freedex-agent-php-sdk.git"
-    }
+    {"type": "vcs", "url": "https://github.com/zhangjinteng/freedex-agent-php-sdk.git"}
   ],
   "require": {
-    "freedex/agent-sdk": "^0.1"
+    "freedex/agent-sdk": "dev-main"
   }
 }
 ```
 
-仓库为私有仓库，安装环境需要具备该仓库的 GitHub 读取权限。Composer 的 VCS repository 会调用 `git clone`，所以业务项目的构建环境需要安装 `git`；CI 中建议通过 `COMPOSER_AUTH` 注入 GitHub Token，不要把 Token 写入仓库。
+在业务项目运行 `composer update freedex/agent-sdk`，提交业务项目的 `composer.lock`；部署使用 `composer install` 复用锁定提交。需要仓库权限时，通过构建环境的 Git 凭据配置访问，不把凭据写入 URL 或提交到代码库。新增钱包能力发布在 `main` 分支，尚未创建对应版本 tag。
 
-本地开发可在业务项目里使用 path repository：
-
-```json
-{
-  "repositories": [
-    {
-      "type": "path",
-      "url": "../path/to/exchange/sdks/php/agent-sdk"
-    }
-  ],
-  "require": {
-    "freedex/agent-sdk": "*"
-  }
-}
-```
-
-## 初始化
+## 初始化与余额查询
 
 ```php
 <?php
+require __DIR__ . '/vendor/autoload.php';
 
 use Freedex\Agent\AgentClient;
 use Freedex\Agent\AgentConfig;
+use Freedex\Agent\Model\QueryUserAssetsRequest;
 
 $client = new AgentClient(new AgentConfig(
-    'https://agent.example.com',
-    'AGENT001',
-    'your-api-secret',
-    'USDT'
-));
-```
-
-SDK 会自动注入以下字段：
-
-- `agentCode`
-- `timestamp`
-- `nonce`
-- `sign`
-
-签名算法与 agent 服务端一致：排除 `sign`，空值不参与，按 key ASCII 排序，拼接为 `k=v&k2=v2` 后计算 HMAC-SHA256 hex。
-
-## 绑定用户
-
-```php
-use Freedex\Agent\Model\BindRequest;
-
-$resp = $client->bind(BindRequest::of('agent-user-001'));
-echo $resp->platformUserId;
-```
-
-## 固定金额划转
-
-```php
-use Freedex\Agent\Model\Direction;
-use Freedex\Agent\Model\TransferRequest;
-
-$resp = $client->transfer(TransferRequest::fixed(
-    'AGT-ORDER-1001',
-    'agent-user-001',
-    Direction::IN,
-    'USDT',
-    '10.00'
+    (string) getenv('AGENT_BASE_URL'),
+    (string) getenv('AGENT_CODE'),
+    (string) getenv('AGENT_API_SECRET')
 ));
 
-echo $resp->orderStatus;
-```
-
-`Direction::IN` 表示转入平台，`Direction::OUT` 表示转出平台。金额使用字符串，避免浮点精度问题。
-
-## 全部划出
-
-```php
-use Freedex\Agent\Model\TransferAllOutRequest;
-
-$resp = $client->transferAllOut(
-    TransferAllOutRequest::of('AGT-ORDER-1002', 'agent-user-001', 'USDT')
+$assets = $client->queryUserAssets(
+    QueryUserAssetsRequest::of('1188041528')->withFunding()
 );
-
-echo $resp->amount;
 ```
 
-## 查单
+`AGENT_BASE_URL` 是平台提供的 **Agent API 服务地址**，不含 `/v1/agent` 路径；SDK 会追加具体路由。示例用户 ID 必须替换为绑定接口返回的真实公开 ID。
+
+## 钱包划转
 
 ```php
-use Freedex\Agent\Model\OrderQueryType;
-use Freedex\Agent\Model\QueryOrderRequest;
+use Freedex\Agent\Model\WalletTransferRequest;
+use Freedex\Agent\Model\WalletTransferQueryRequest;
 
-$resp = $client->queryOrder(
-    QueryOrderRequest::of('AGT-ORDER-1001', OrderQueryType::TRANSFER_IN)
+// 后台先保存业务订单和原单号，再在受控业务入口提交一次。
+$request = WalletTransferRequest::of(
+    'merchant-wallet-001', 'partner-user-001', 'FUNDING_TO_CONTRACT', '10'
 );
+$result = $client->walletTransfer($request);
 
-echo $resp->status;
-```
-
-## 创建前端入口链接
-
-```php
-use Freedex\Agent\Model\CreateEntryUrlRequest;
-
-$resp = $client->createEntryUrl(
-    CreateEntryUrlRequest::of('agent-user-001')->withRedirectPath('/trade')
+// 处理中或创建结果未知时，后续使用原单号查单。
+$latest = $client->queryWalletTransfer(
+    WalletTransferQueryRequest::of('merchant-wallet-001')
 );
-
-echo $resp->webUrl;
 ```
 
-## 业务异常
+支持 `PARTNER_TO_FUNDING`、`FUNDING_TO_PARTNER`、`FUNDING_TO_CONTRACT`、`CONTRACT_TO_FUNDING`。仅支持 USDT；金额使用规范十进制字符串，例如 `10`、`0.01`，不传 `10.00`、浮点数或科学计数法。Funding ↔ Contract 支持 `amount=null, transferAll=true`。
 
-HTTP 非 2xx 或 agent 响应 `code != 0` 时，SDK 抛 `AgentApiException`：
+只有 `status=SUCCESS` 表示钱包订单已确认成功；`code=0`、HTTP 200 或非空订单号都不能单独证明到账。SDK 不自动重试创建；未知结果保留原单查单，不能换单号重新划款。
 
-```php
-use Freedex\Agent\Exception\AgentApiException;
-use Freedex\Agent\Model\OrderQueryType;
-use Freedex\Agent\Model\QueryOrderRequest;
+## 支持范围
 
-try {
-    $client->queryOrder(QueryOrderRequest::of('missing-order', OrderQueryType::TRANSFER_IN));
-} catch (AgentApiException $e) {
-    echo $e->getHttpStatus();
-    echo $e->getCodeValue();
-    echo $e->getResponseBody();
-}
-```
+- 原有用户绑定、固定金额上下分、全部划出、冲正、查单、代理商资金和用户资产查询。
+- 新增 Funding 钱包划转、原单号查询、`includeFunding` 余额查询。
+- 前端直接跳转入口、服务版本、Webhook 验签。
+- **未封装** `createEmbedToken`、`queryExchangeRates`、`listSupportedFiatCurrencies`；不包含合约订单、成交、仓位查询扩展。
 
-网络、序列化、配置错误抛 `AgentSdkException`。
-
-## Webhook 验签
-
-agent 服务推送 webhook 时使用请求头：
-
-- `X-Agent-Timestamp`
-- `X-Agent-Nonce`
-- `X-Agent-Signature`
-
-验签示例：
-
-```php
-use Freedex\Agent\WebhookVerifier;
-
-$ok = WebhookVerifier::verify(
-    'your-api-secret',
-    $timestampHeader,
-    $nonceHeader,
-    $rawRequestBody,
-    $signatureHeader
-);
-
-$idempotencyKey = WebhookVerifier::idempotencyKey($rawRequestBody);
-```
-
-`idempotencyKey` 格式为 `orderType:orderId:targetStatus`，可用于代理商侧 webhook 幂等处理。
-
-## 测试
-
-本仓库提供一个不依赖 PHPUnit 的基础测试 runner：
+## 离线验证
 
 ```bash
 php tests/run.php
+php examples/merchant.php
 ```
 
-当前开发环境如果没有本机 PHP，可以用已有 PHP Docker 镜像运行：
+测试和默认 Demo 使用模拟传输，无需服务凭据且不会发起网络或资金请求。Demo 的 `--live-readonly` 模式只查询真实资产和已有资金单，参数见 [后台对接文档](docs/backend-integration.md)。
 
-```bash
-docker run --rm -v "$PWD/../../../":/work -w /work/sdks/php/agent-sdk ccr.ccs.tencentyun.com/cddzg/platform_admin_php:latest php tests/run.php
-```
+源码来源和验证记录见 [交付记录](docs/delivery.md)。GitHub 版在上游 SDK 基础上保留了旧版 `AgentClient` 的调试信息访问方法，以兼容现有合作商后台。

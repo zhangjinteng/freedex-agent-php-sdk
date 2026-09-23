@@ -17,6 +17,10 @@ class QueryUserAssetsResponse extends AgentResponse
     public $availableBalance = '';
     /** @var string */
     public $isolatedMargin = '';
-    /** @var int */
+    /** @var int|string */
     public $version = 0;
+    /** @var array<string,mixed>|null Funding 的五个公开字段原样保留，缺省不是零余额。 */
+    public $funding;
+    /** @var bool */
+    public $isSimulatedUser = false;
 }

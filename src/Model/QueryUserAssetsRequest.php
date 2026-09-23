@@ -3,8 +3,19 @@ declare(strict_types=1);
 
 namespace Freedex\Agent\Model;
 
-class QueryUserAssetsRequest extends ArraySerializable
+class QueryUserAssetsRequest extends WhitelistedRequest
 {
+    protected const FIELDS = ['platformUserId' => 'string', 'includeFunding' => 'boolean'];
+
+    /** @var bool|null */
+    public $includeFunding;
+
+    public function withFunding(bool $include = true): self
+    {
+        $this->includeFunding = $include;
+        return $this;
+    }
+
     /** @var string */
     public $platformUserId;
 

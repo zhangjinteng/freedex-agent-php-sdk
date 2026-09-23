@@ -9,4 +9,6 @@ class BindResponse extends AgentResponse
     public $platformUserId = '';
     /** @var string */
     public $bindStatus = '';
+    /** @var bool */
+    public $isSimulatedUser = false;
 }
